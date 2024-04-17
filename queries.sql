@@ -57,3 +57,57 @@ select -- в основном запросе выбираем необходим
 	income
 from tab
 order by number_of_weekday, seller; -- сортируем по порядковому номеру дня недели и по продавцу
+
+with customer_age_tab as ( -- формируем подзапрос, где каждого покупателя определяем в категорию по возрасту
+	select
+		customer_id,
+		(
+        	case
+            	when age between 16 and 25 then '16-25'
+            	when age between 26 and 40 then '26-40'
+            	when age > 40 then '40+'
+        	end
+    	) as age_category
+	from customers c 
+)
+
+select -- в основном запросе находим количество покупателей в каждой возрастной категории
+	age_category,
+	count(customer_id) as age_count
+from customer_age_tab
+group by age_category -- группировка по первому полу. Поле не использовалось в агрегирующих функциях
+order by age_category; -- сортировка по возрастным группам
+
+select
+	to_char(s.sale_date, 'YYYY-MM') as selling_month, -- находим месяц покупки
+	count(distinct customer_id) as total_customers, -- считаем количество уникальных покупателей
+	floor(sum(p.price * s.quantity)) as income -- вычисляем доход как сумму произведений цены и количества. Округляем до целого значения в меньшую сторону
+from sales s -- соединяем таблицы
+inner join products p
+	on s.product_id = p.product_id
+group by 1 -- группировка по первому полу. Поле не использовалось в агрегирующих функциях
+order by 1; -- сортировка по месяцам покупки (по возрастанию)
+
+with customer_tab as ( -- формируем подзапрос
+	select distinct on (c.customer_id) -- выбираем уникальные ID покупателей, первая покупка которых была в ходе проведения акций. Дата первой покупки определяется с помощью ORDER BY (в прямом порядке)
+		c.customer_id as customer_id,
+		concat(c.first_name, ' ', c.last_name) as customer, -- соединяем имя и фамилию покупателя
+		s.sale_date as sale_date,
+		concat(e.first_name, ' ', e.last_name) as seller -- соединяем имя и фамилию продавца
+	from sales s -- соединяем таблицы
+	inner join products p
+		on s.product_id = p.product_id
+	inner join customers c 
+		on s.customer_id = c.customer_id
+	inner join employees e
+		on s.sales_person_id = e.employee_id
+	where p.price = 0 -- условие фильтрации (акционные товары отпускали со стоимостью, равной 0)
+	order by c.customer_id, s.sale_date -- сортировка по возрастанию
+)
+
+select -- в основном запросе выбираем необходимые для отчета поля из подзапроса
+	customer,
+	sale_date,
+	seller
+from customer_tab
+order by customer_id; -- сортировка по ID покупателя (по возрастанию)
